@@ -7,19 +7,131 @@ output:
 
 
 ## Loading and preprocessing the data
+Read zip file with read.table
 
+```{r setoptions, echo = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
+```{r}
+library(dplyr)
+library(ggplot2)
+activity <- read.table(unz("activity.zip", "activity.csv"),
+                       header = TRUE,
+                       sep = ",",
+                       stringsAsFactors = FALSE,
+                      )
+activity$date <- as.Date(activity$date, "%Y-%m-%d")
+```
 
 ## What is mean total number of steps taken per day?
+1. Caculate the total number of steps per day
+```{r}
+activity_perday <- activity %>%
+        group_by(date) %>%
+        summarise(step_perday = sum(steps, na.rm = TRUE), .groups = "drop")
+activity_perday
+```
 
+2. make a histogram of the total number of steps taken each day
+```{r}
+ggplot(data = activity_perday, aes(step_perday)) +
+  geom_histogram() +
+  labs(title = "Histogram of total number of steps taken ") +
+  labs(x = "Steps per day")
+
+```
+
+3. Caculate mean and median of the total number of steps taken per day
+```{r}
+mean(activity_perday$step_perday, na.rm = TRUE)
+median(activity_perday$step_perday, na.rm = TRUE)
+```
 
 
 ## What is the average daily activity pattern?
+1. use summarise to caculate the mean of each interval, and draw a time series plot.
+```{r}
+ac_pattern <- activity %>%
+          group_by(interval) %>%
+          summarise(step_average = mean(steps, na.rm = TRUE), .groups = "drop")
+ggplot(data = ac_pattern, aes(interval, step_average))  +
+  geom_line() +
+    labs(title = "Daily activity pattern") +
+    labs(x = "Intervals(5 minutes)", y = "Average steps")
+```
 
-
+2. find the interval has the max number of steps.
+```{r}
+which.max(ac_pattern$step_average)
+``` 
 
 ## Imputing missing values
+1. Caculate the total missing values in the dataset
 
+```{r}
+sum(is.na(activity$steps))
+```
+2. Impute strategy. There are days has all NAs, so I will use the mean for 5 minute interval to fill the data.
+3. The new dataset name is ac_impute
+```{r}
+step_na <- is.na(activity$steps)
+impute_ac <- function(activity_row) {
+  if (is.na(activity_row[1])) {
+     ac_pattern[ac_pattern[, 1] == as.integer(activity_row[3]), 2]
+  } else{
+     activity_row[1]
+  }
+}
+ac_impute <- activity
+ac_impute$steps <- as.numeric(unlist(apply(activity, 1, impute_ac)))
 
+```
+4. Make a histogram, and caculate the mean and median of the new dataset
+```{r}
+ac_impute_perday <- ac_impute %>%
+        group_by(date) %>%
+        summarise(step_perday = sum(steps, na.rm = TRUE), .groups = "drop")
+ggplot(ac_impute_perday, aes(step_perday)) +
+  geom_histogram() +
+  labs(title = "Histogram of total number of steps taken (imputed dataset) ") +
+  labs(x = "Steps per day")
+
+```
+
+mean and median of the new dataset.
+```{r}
+mean(ac_impute_perday$step_perday)
+median(ac_impute_perday$step_perday)
+```
+According the two histogram, The zero number of total number of steps per day drops significantly, 
+and the *mean* and *median* are both increased, which *mean* increased more. 
+
+Because of the impute strategy. The intervals where  the steps was larger ,there will be more likely influenced by the impute,
+The strategy of impute will  impact the pattern of the new dateset , the more data missing the more impact is.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+1. Creating new dataset as required
+```{r}
+ac_impute <- mutate(ac_impute, week = weekdays(date, abbreviate = TRUE))
+ac_impute[ac_impute$week %in%
+          c("Mon", "Tue", "Wed", "Thu", "Fri"), 4] <- "weekday"
+ac_impute[ac_impute$week %in%
+          c("Sat", "Sun"), 4] <- "weekend"
+ac_impute$week <- as.factor(ac_impute$week)
+```
+
+2. make the plot.
+```{r}
+ac_impute_week <- ac_impute %>%
+    group_by(interval, week) %>%
+    summarise(step_interval = mean(steps, na.rm = TRUE), .groups = "drop")
+ggplot(ac_impute_week, aes(interval, step_interval)) +
+    facet_grid(week~.) +
+    geom_line() +
+    labs(title = "Patters between weekday and weekends") +
+    labs(x = "Intervals(5 minutes)", y = "Average steps")
+
+
+```
